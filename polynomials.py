@@ -24,20 +24,32 @@ class Term:
         elif self.degree == 1: return f"{self.coefficient}x"
         else: return f"{self.coefficient}x^{self.degree}"
 
+    def __radd__(self, other):
+        return self + other
+
     def __add__(self, other):
+        if not isinstance(other, Term):
+            other = Term.numerical(other)
+        
         if math.isclose(self.degree, other.degree):
             return Term(self.coefficient + other.coefficient, self.degree)
         else:
             return Poly([self, other])
 
+    def __rsub__(self, other):
+        return self - other
+
     def __sub__(self, other):
         return self + (other * -1)
 
+    def __rmul__(self, other):
+        return self * other
+
     def __mul__(self, other):
-        if isinstance(other, Term):
-            return Term(self.coefficient * other.coefficient, self.degree * other.degree)
-        else:
-            return Term(self.coefficient * other, self.degree)
+        if not isinstance(other, Term):
+            other = Term.numerical(other)
+
+        return Term(self.coefficient * other.coefficient, self.degree + other.degree)
 
     def __truediv__(self, other):
         if not isinstance(other, Term):
@@ -57,7 +69,10 @@ class Poly:
                 poly += Term.numerical(float(term))
             else:
                 coefficient, degree = term.split("x")
-                poly += Term(float(coefficient), int(degree[1:]) if degree else 1)
+                poly += Term(
+                        float(coefficient if coefficient else 1),
+                        int(degree[1:]) if degree else 1
+                        )
 
         return poly
 
@@ -121,6 +136,9 @@ class Poly:
         self = self + other
         return self
 
+    def __radd__(self, other):
+        return self + other
+
     def __add__(self, other):
         if isinstance(other, Term):
             if self.has_degree(other.degree):
@@ -152,8 +170,14 @@ class Poly:
         self = self - other
         return self
 
+    def __rsub__(self, other):
+        return self - other
+
     def __sub__(self, other):
         return self + (other * -1)
+
+    def __rmul__(self, other):
+        return self * other
 
     def __mul__(self, other):
         if isinstance(other, Poly):
@@ -162,7 +186,6 @@ class Poly:
                 result += other * term
 
             return result
-
         else:
             return Poly([term * other for term in self.terms])
 
@@ -182,6 +205,8 @@ class Poly:
         ))
 
 def square_free(poly):
+    """Removes double roots of a polynomial, by dividing by x^2 as much as it can
+    """
     all_divisible = True
     while True: 
         for term in poly.terms:
@@ -195,25 +220,46 @@ def square_free(poly):
 
     return poly
 
-def calc_roots(poly_in):
-    #Use Durand-Kerner method
+def calc_roots(poly_in, epsilon=1e-12):
+    """Calculates an aproximation of the roots of a polynomial, using the 
+    Durand-Kerner method
+    """
+
+    #Make the polynomial so its leading coefficient is 0
+    poly = poly_in / poly_in.get_leading_coefficient()
+
     def calc_next(prev, prev_aprox):
+        #The formula to calculate the next aproximation of a coefficient from
+        #having the aproximations of the others
         return prev - poly.evaluate(prev)/reduce(lambda acc, n: acc * n, (prev - other for other in prev_aprox), 1)
 
-    def aproximate(num, epsilon=1e-12):
+    def aproximate(num):
         real, imag = num.real, num.imag
 
-        if abs(num.real) < epsilon: real = 0
-        if abs(num.imag) < epsilon: imag = 0
+        if abs(real) < epsilon: real = 0
+        else: real = round(real)
 
-        return complex(real, imag)
+        if abs(imag) < epsilon: imag = 0
+        else: imag = round(imag)
 
-    poly = poly_in / poly_in.get_leading_coefficient()
+        #Choose the best of all options
+        possible = [complex(real, imag), complex(num.real, imag), complex(real, num.imag), complex(real, imag), num]
+        best = min(possible, key=lambda n: abs(poly.evaluate(n)))
+        
+        #If the best num is only real, dont return a complex number
+        if best.imag == 0: 
+            #If is an integer, return such
+            if best.real % 1 == 0: return int(best.real)
+            return best.real
+        return best
+
+    #Obtain the first "aproximations" that are simply random complex numbers other than 1, and
+    #the first aproximations obtained from those
     prevs = [complex(0.4, 0.9)**n for n in range(poly.get_degree())]
     currs = [calc_next(aprox, [p for p in prevs if p != aprox]) for i,aprox in enumerate(prevs)]
     while max(abs(p - c) for p,c in zip(prevs, currs)) >= 1e-12:
         prevs = currs
-        currs = [calc_next(aprox, [p for p in prevs if p != aprox]) for i,aprox in enumerate(prevs)]
+        currs = [calc_next(aprox, [p for p in prevs if p != aprox]) for aprox in prevs]
 
-    #Purge negligible values
-    return [aproximate(num) for num in currs]
+    #Purge negligible values, also return in a predictable way
+    return sorted([aproximate(num) for num in currs], reverse=True)

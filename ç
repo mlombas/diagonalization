@@ -1,0 +1,56 @@
+from polynomials import *
+
+def minor(mat, i, j):
+    result = []
+    for index,row in enumerate(mat):
+        if index != i:
+            result.append(row[:j] + row[j + 1:])
+
+    return result
+
+
+def determinant(mat):
+    if len(mat) != len(mat[0]): raise RuntimeError("Cannot take the determinant of a non-square matrix")
+
+    if len(mat) == 1: return mat[0][0]
+
+    result = 0
+    row = mat[0]
+    for j,num in enumerate(row):
+        result += (-1)**j * num * determinant(minor(mat, 0, j))
+    
+    return result
+
+
+def characteristic_polynomial(mat):
+    if len(mat) != len(mat[0]): raise RuntimeError("Cannot calculate characteristic polynomial of a non-square matrix")
+
+    for i in range(len(mat)):
+        mat[i][i] = Poly([Term(-1,1), Term.numerical(mat[i][i])])
+
+    return determinant(mat)
+
+def diagonalize(mat):
+    if len(mat) != len(mat[0]): raise RuntimeError("Cannot diagonalize non-square matrix")
+
+    positions = len(mat)
+    result = []
+
+    roots = calc_roots(characteristic_polynomial(mat))
+    for pos,eigenvalue in enumerate(roots):
+        row = [0] * positions
+        row[pos] = eigenvalue
+
+        result.append(row)
+
+    return result
+
+def print_matrix(mat):
+    max_length = max(
+            max(len(str(element)) for element in row) for row in mat
+    )
+
+    print("-" * max_length * len(mat[0]))
+    for row in mat:
+        print("".join(f"{str(el):<{max_length + 1}}" for el in row))
+    print("-" * max_length * len(mat[0]))
